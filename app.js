@@ -1,9 +1,17 @@
 document.addEventListener('DOMContentLoaded', () => {
 
     let canvas = document.getElementById("canvas")
-    let best_time_p = document.getElementById("best_time")
-    let score_p = document.getElementById("score")
-    let score = -1
+    let best_time_p1 = document.getElementById("best_time1")
+    let score_p1 = document.getElementById("score1")
+    let best_time_p2 = document.getElementById("best_time2")
+    let score_p2 = document.getElementById("score2")
+
+    var draw_circles = false;
+
+    document.getElementById("toggleCircles").addEventListener("click", function() {
+        draw_circles = !draw_circles; // Toggles between true and falseada
+        console.log("Current value: " + draw_circles);
+    })
 
     let context = canvas.getContext("2d")
     let game = true
@@ -44,13 +52,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         draw(context) {
-            context.beginPath()
-            context.strokeStyle = this.color
-            context.lineWidth = 5
+            if (draw_circles) {
+                context.beginPath()
+                context.strokeStyle = this.color
+                context.lineWidth = 5
 
-            context.arc(this.xpos, this.ypos, this.radius, 0, Math.PI*2, false)
-            context.stroke()
-            context.closePath()
+                context.arc(this.xpos, this.ypos, this.radius, 0, Math.PI*2, false)
+                context.stroke()
+                context.closePath()
+            }
         }
 
 
@@ -58,7 +68,43 @@ document.addEventListener('DOMContentLoaded', () => {
         update() {
             this.draw(context)
         }
-    } 
+    }
+
+    class Oil {
+        constructor(xpos, ypos, radius, color, image) {
+            this.xpos = xpos
+            this.ypos = ypos
+            this.radius = radius
+            this.color = color
+            this.image_size = 0.08
+            this.image = image
+            this.active = true
+            this.savedTime = 2000
+            this.respawnTime = this.savedTime
+        }
+
+        draw(context) {
+            if (this.active) {
+                context.drawImage(this.image, (this.xpos- this.image_size*1920 / 2), (this.ypos- this.image_size*1920 / 2), this.image_size*1920, this.image_size*1920)
+
+                if (draw_circles) {
+                    context.beginPath()
+                    context.strokeStyle = this.color
+                    context.lineWidth = 5
+
+                    context.arc(this.xpos, this.ypos, this.radius, 0, Math.PI*2, false)
+                    context.stroke()
+                    context.closePath()
+                }
+            }
+        }
+
+
+
+        update() {
+            this.draw(context)
+        }
+    }
 
     class Gate {
         constructor(color) {
@@ -70,7 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
             context.lineWidth = 20
             context.strokeStyle = this.color
 
-            if (mode == "easy") {
+            if (mode === "easy") {
                 var startX = canvas.width/2
                 var startY = canvas.height/2 + 103
 
@@ -79,10 +125,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             else {
                 var startX = canvas.width/2
-                var startY = canvas.height/2 + 75
+                var startY = canvas.height/2 + 78
 
                 var endX = canvas.width/2
-                var endY = canvas.height - 75
+                var endY = canvas.height - 78
             }
 
             context.moveTo(startX, startY); // Move the pen to the starting point
@@ -99,25 +145,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     class Car {
-        constructor(xpos, ypos, radius, color, text, speed, image) {
+        constructor(xpos, ypos, radius, color, text, speed, image, best_time_p, score_p) {
             this.xpos = xpos
             this.ypos = ypos
             this.radius = radius
+            this.speed = speed
+
+            this.savedColor = color
             this.color = color
             this.text = text
-            this.speed = speed
 
             this.dx = 1 * speed
             this.dy = 1 * speed
             this.angle = Math.PI
             this.image = image
+
+            this.touching_gate = false
+            this.crash = false
+            this.moving = true
+            this.spinning = false
+
+            this.startTime = 0
+
+            this.best_time = 9999999
+            this.score = -1
+            this.best_time_p = best_time_p
+            this.score_p = score_p
         }
 
         draw(context) {
             
             let ctx = context
-
-
             ctx.save();
             var image_size = 0.13
 
@@ -134,19 +192,77 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.restore();
 
 
-            context.beginPath()
-            context.strokeStyle = this.color
-            context.lineWidth = 5
+            if (draw_circles) {
+                context.beginPath()
+                context.strokeStyle = this.color
+                context.lineWidth = 5
 
-            context.textAlign = "center"
-            context.textBaseline = "middle"
+                context.textAlign = "center"
+                context.textBaseline = "middle"
 
-            context.fillText(this.text, this.xpos, this.ypos)
+                context.fillText(this.text, this.xpos, this.ypos)
 
-            context.arc(this.xpos, this.ypos, this.radius, 0, Math.PI*2, false)
+                context.arc(this.xpos, this.ypos, this.radius, 0, Math.PI*2, false)
 
-            context.stroke()
-            context.closePath()
+                context.stroke()
+                context.closePath()
+            }
+        }
+
+        async crashing() {
+            this.moving = false
+            this.speed = 0
+
+            await waitTime(750)
+
+            this.xpos = canvas.width/2 + 100
+            this.ypos = 565
+            this.angle = Math.PI
+
+            this.moving = true
+        }
+
+        async spin() {
+            this.moving = false
+            this.speed = 0
+
+            for(var i=0; i< 50; i++) {
+                await waitTime(10)
+                this.angle += Math.PI/25
+            }
+
+
+            this.moving = true
+        }
+
+        checkGate() {
+            if ((canvas.width/2 -3 < this.xpos) && (this.xpos < canvas.width/2 +3) && (canvas.height/2+100 < this.ypos) && (this.ypos < canvas.height-100)) {
+                if (!this.touching_gate) {
+                    this.score += 1
+                    this.score_p.innerHTML = this.score
+    
+                    if (this.score > 0) {
+                        var elapsed_time = performance.now()-this.startTime
+    
+                        var seconds = Math.floor(elapsed_time / 1000);
+                        var milliseconds = elapsed_time % 1000;
+                        milliseconds = milliseconds.toFixed(2)
+    
+                        if (elapsed_time < this.best_time) {
+                            this.best_time = elapsed_time
+                            this.best_time_p.innerHTML = seconds + ' s ' + milliseconds + ' ms '
+                        }
+                        this.startTime = performance.now()
+                    }
+                    else {
+                        this.best_time_p.innerHTML = "Complete a full lap"
+                    }
+                }
+                this.touching_gate = true
+            }
+            else {
+                this.touching_gate = false
+            }
         }
 
         calculate_speed(delta) {
@@ -210,11 +326,27 @@ document.addEventListener('DOMContentLoaded', () => {
         return Math.sqrt(Math.pow(xpos2-xpos1, 2) + Math.pow(ypos2 - ypos1, 2))
     }
 
-    var img = new Image()
+    var img1 = new Image()
     // image source is https://www.rawpixel.com/image/8705143/png-plant-people
-    img.src = "car.png"
+    img1.src = "car.png"
 
-    let my_car = new Car(canvas.width/2 + 100, 565, 50, "black", "car", 0, img)
+    var img2 = new Image()
+    // image source is https://www.rawpixel.com/image/8705143/png-plant-people
+    img2.src = "car2.png"
+
+    let my_car1 = new Car(canvas.width/2 + 100, 565, 50, "blue", "car 1", 0, img1, best_time_p1, score_p1)
+    let my_car2 = new Car(canvas.width/2 + 100, 565, 50, "green", "car 2", 0, img2, best_time_p2, score_p2)
+    let cars = [my_car1, my_car2]
+
+    var oilImg = new Image()
+    // image source is https://www.vecteezy.com/vector-art/10685313-black-ink-spot-and-dots-drops-and-splashes-blots-of-liquid-paint-watercolor-grunge-vector-illustration
+    oilImg.src = "oilSpill.png"
+
+    let oil1 = new Oil(220, canvas.height/2, 30, "red", oilImg)
+    let oil2 = new Oil(canvas.width-220, canvas.height/2, 30, "red", oilImg)
+    let oils = [oil1, oil2]
+    
+    let gate = new Gate("blue")
 
     let circles = []
     
@@ -253,70 +385,82 @@ document.addEventListener('DOMContentLoaded', () => {
         add_circle(canvas.width-30, i)
     }
     
-    gate = new Gate("blue")
-
-
+    
     function change(e) {
         e.preventDefault()
-
+        
         let turn_rate = 0.2
         let acceleration = 1
-        switch(e.keyCode) {
-            case 37:
-                // left
-                my_car.car_change_direction(-1, turn_rate)
-                break
+        if (my_car1.moving) {
+            switch(e.keyCode) {
+                case 37:
+                    // left 1
+                    my_car1.car_change_direction(-1, turn_rate)
+                    break
 
-            case 38:
-                // up
-                my_car.car_change_speed(acceleration)
-                break
+                case 38:
+                    // up 1
+                    my_car1.car_change_speed(acceleration)
+                    break
 
-            case 39:
-                // right
-                my_car.car_change_direction(1, turn_rate)
-                break
+                case 39:
+                    // right 1
+                    my_car1.car_change_direction(1, turn_rate)
+                    break
 
-            case 40:
-                my_car.car_change_speed(-acceleration)
-                break
+                case 40:
+                    // down 1
+                    my_car1.car_change_speed(-acceleration)
+                    break
+            }
+        }
+        if (my_car2.moving) {
+            switch(e.keyCode) {
 
-            case 65:
-                // left
-                my_car.car_change_direction(-1, turn_rate)
-                break
+                case 65:
+                    // left 2
+                    my_car2.car_change_direction(-1, turn_rate)
+                    break
 
-            case 87:
-                // up
-                my_car.car_change_speed(acceleration)
-                break
+                case 87:
+                    // up 2
+                    my_car2.car_change_speed(acceleration)
+                    break
 
-            case 68:
-                // right
-                my_car.car_change_direction(1, turn_rate)
-                break
+                case 68:
+                    // right 2
+                    my_car2.car_change_direction(1, turn_rate)
+                    break
 
-            case 83:
-                my_car.car_change_speed(-acceleration)
-                break
+                case 83:
+                    // down 2
+                    my_car2.car_change_speed(-acceleration)
+                    break
+            }
         }
     }
 
     document.addEventListener('keydown', change)
 
-    my_car.draw(context)
-    gate.draw(context)
+    cars.forEach(this_car => {
+        this_car.update()
+    })
+    gate.update()
     
-    // circles.forEach(this_circle => {
-    //     this_circle.update()
-    // }); 
-    
+    circles.forEach(this_circle => {
+        this_circle.update()
+    });
+
+    oils.forEach(this_oil => {
+        this_oil.update()
+    })
     
 
-    var touching_gate = false
-    var crash = false
-
-    var startTime = 0
+    function waitTime(time) {
+        return new Promise(resolve => {
+            setTimeout(resolve, time);
+        });
+    }
 
     let updateCar = function() {
         if (game) {
@@ -324,52 +468,69 @@ document.addEventListener('DOMContentLoaded', () => {
             requestAnimationFrame(updateCar)
             context.clearRect(0,0,canvas.width, canvas.height)
             drawBackground()
-            my_car.update()
+
+            cars.forEach(this_car => {
+                this_car.crash = false
+                this_car.spinning = false
+                this_car.update(context)
+            })
+
+            circles.forEach(this_circle => {
+                this_circle.update()
+            })
+
+            oils.forEach(this_oil => {
+                this_oil.update()
+            })
+
             gate.draw(context)
             
             
-            circles.forEach(this_circle => {
-                //this_circle.update()
-                if (getDistance(my_car.xpos, my_car.ypos, this_circle.xpos, this_circle.ypos) < (this_circle.radius + my_car.radius)) {
-                    crash = true
-                }
-            });
+            cars.forEach(this_car => {
+                
 
-            if (crash) {
-                my_car.color = "red"
-                game = false
-            }
-            else {
-                my_car.color = "black"
-            }
+                circles.forEach(this_circle => {
+                    if (getDistance(this_car.xpos, this_car.ypos, this_circle.xpos, this_circle.ypos) < (this_circle.radius + this_car.radius)) {
+                        this_car.crash = true
+                    }
+                }) 
 
-            if ((canvas.width/2 -3 < my_car.xpos) && (my_car.xpos < canvas.width/2 +3) && (canvas.height/2+100 < my_car.ypos) && (my_car.ypos < canvas.height-100)) {
-                if (!touching_gate) {
-                    score += 1
-                    score_p.innerHTML = score
-
-                    if (score > 0) {
-                        var elapsed_time = performance.now()-startTime
-
-                        var seconds = Math.floor(elapsed_time / 1000);
-                        var milliseconds = elapsed_time % 1000;
-                        milliseconds = milliseconds.toFixed(2)
-                        best_time_p.innerHTML = seconds + ' s ' + milliseconds + ' ms '
-                        startTime = performance.now()
+                oils.forEach(this_oil => {
+                    if (this_oil.active) {
+                        if (getDistance(this_car.xpos, this_car.ypos, this_oil.xpos, this_oil.ypos) < (this_oil.radius + this_car.radius)) {
+                            this_car.spinning = true
+                            this_oil.active = false
+                            this_oil.respawnTime = this_oil.savedTime
+                        }
                     }
                     else {
-                        best_time_p.innerHTML = "Complete a full lap"
+                        if (this_oil.respawnTime <= 0) {
+                            console.log("Oil reactivating")
+                            this_oil.active = true
+                        }
+                        else {
+                            this_oil.respawnTime -= 1
+                        }
                     }
-                }
-                touching_gate = true
-            }
-            else {
-                touching_gate = false
-            }
-        }
-        
-    }
+                }) 
 
+                if (this_car.crash) {
+                    this_car.color = "red"
+                    this_car.crashing()
+                }
+                else {
+                    this_car.color = this_car.savedColor
+                }
+
+                if (this_car.spinning) {
+                    this_car.spin()
+                }
+
+                this_car.checkGate()
+
+            });
+        } 
+    }
 
     updateCar()
 

@@ -1,16 +1,47 @@
 body {
+    background-color: brown;
     display: flex;
     flex-direction: column;
     align-items: center;
-}
-
-.grid {
-    border: solid 1px;
-    width: 300px;
-    height: 300px;
+    text-align: center;
 }
 
 canvas {
     background-size: cover;
+}
+
+#info {
+    width: 55vw;
+    padding: 20px;
+
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+}
+
+#scoresContainer {
+    flex: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#scores {
+    margin: 0;
+    width: 20vw;
+
+    border: 2px solid darkblue;
+    background-color: lightblue;
+    border-radius: 20px 20px 20px 20px; /* Specify individual values for each corner */
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+}
+
+#tools {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
 }
 
