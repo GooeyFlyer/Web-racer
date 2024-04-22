@@ -107,8 +107,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     class Gate {
-        constructor(color) {
+        constructor(color, startX, startY, endX, endY) {
             this.color = color
+            this.startX = startX
+            this.startY = startY
+            this.endX = endX
+            this.endY = endY
         }
 
         draw(context) {
@@ -116,23 +120,8 @@ document.addEventListener('DOMContentLoaded', () => {
             context.lineWidth = 20
             context.strokeStyle = this.color
 
-            if (mode === "easy") {
-                var startX = canvas.width/2
-                var startY = canvas.height/2 + 103
-
-                var endX = canvas.width/2
-                var endY = canvas.height - 100
-            }
-            else {
-                var startX = canvas.width/2
-                var startY = canvas.height/2 + 78
-
-                var endX = canvas.width/2
-                var endY = canvas.height - 78
-            }
-
-            context.moveTo(startX, startY); // Move the pen to the starting point
-            context.lineTo(endX, endY); // Draw a line to the ending point
+            context.moveTo(this.startX, this.startY); // Move the pen to the starting point
+            context.lineTo(this.endX, this.endY); // Draw a line to the ending point
             context.stroke()
             context.closePath()
         }
@@ -165,10 +154,12 @@ document.addEventListener('DOMContentLoaded', () => {
             this.moving = true
             this.spinning = false
 
+            this.validLap = false
+
             this.startTime = 0
 
             this.best_time = 9999999
-            this.score = -1
+            this.score = 0
             this.best_time_p = best_time_p
             this.score_p = score_p
         }
@@ -218,6 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.xpos = canvas.width/2 + 100
             this.ypos = 565
             this.angle = Math.PI
+            this.validLap = false
 
             this.moving = true
         }
@@ -236,32 +228,42 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         checkGate() {
-            if ((canvas.width/2 -3 < this.xpos) && (this.xpos < canvas.width/2 +3) && (canvas.height/2+100 < this.ypos) && (this.ypos < canvas.height-100)) {
-                if (!this.touching_gate) {
-                    this.score += 1
-                    this.score_p.innerHTML = this.score
-    
-                    if (this.score > 0) {
-                        var elapsed_time = performance.now()-this.startTime
-    
-                        var seconds = Math.floor(elapsed_time / 1000);
-                        var milliseconds = elapsed_time % 1000;
-                        milliseconds = milliseconds.toFixed(2)
-    
-                        if (elapsed_time < this.best_time) {
-                            this.best_time = elapsed_time
-                            this.best_time_p.innerHTML = seconds + ' s ' + milliseconds + ' ms '
+            if (this.validLap) {
+                if (touchingGate(this, gate)) {
+                    if (!this.touching_gate) {
+                        this.validLap = false
+                        this.score += 1
+                        this.score_p.innerHTML = this.score
+                        console.log(this.score_p.innerHTML)
+        
+                        if (this.score > 0) {
+                            var elapsed_time = performance.now()-this.startTime
+        
+                            var seconds = Math.floor(elapsed_time / 1000);
+                            var milliseconds = elapsed_time % 1000;
+                            milliseconds = milliseconds.toFixed(2)
+        
+                            if (elapsed_time < this.best_time) {
+                                this.best_time = elapsed_time
+                                this.best_time_p.innerHTML = seconds + ' s ' + milliseconds + ' ms '
+                            }
+                            this.startTime = performance.now()
                         }
-                        this.startTime = performance.now()
+                        else {
+                            this.best_time_p.innerHTML = "Complete a full lap"
+                        }
                     }
-                    else {
-                        this.best_time_p.innerHTML = "Complete a full lap"
-                    }
+                    this.touching_gate = true
                 }
-                this.touching_gate = true
+                else {
+                    this.touching_gate = false
+                }
             }
-            else {
-                this.touching_gate = false
+        }
+
+        checkValid() {
+            if (touchingGate(this, validator)) {
+                this.validLap = true
             }
         }
 
@@ -292,6 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         update() {
+        
             this.draw(context)
 
             this.dx = this.speed * Math.cos(this.angle)
@@ -326,6 +329,10 @@ document.addEventListener('DOMContentLoaded', () => {
         return Math.sqrt(Math.pow(xpos2-xpos1, 2) + Math.pow(ypos2 - ypos1, 2))
     }
 
+    function touchingGate(this_car, this_gate) {
+        return ((this_gate.startX -3 < this_car.xpos) && (this_car.xpos < this_gate.startX +3) && (this_gate.startY < this_car.ypos) && (this_car.ypos < this_gate.endY))
+    }
+
     var img1 = new Image()
     // image source is https://www.rawpixel.com/image/8705143/png-plant-people
     img1.src = "car.png"
@@ -346,7 +353,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let oil2 = new Oil(canvas.width-220, canvas.height/2, 30, "red", oilImg)
     let oils = [oil1, oil2]
     
-    let gate = new Gate("blue")
+
+    // let gate = new Gate("blue", canvas.width/2, canvas.height/2 + 103, canvas.width/2, canvas.height - 100)
+    // easy mode gate
+    
+    let gate = new Gate("blue", canvas.width/2, canvas.height/2 + 78, canvas.width/2, canvas.height - 78)
+    let validator = new Gate("yellow", canvas.width/2, 79, canvas.width/2, canvas.height/2 - 147)
 
     let circles = []
     
@@ -446,6 +458,7 @@ document.addEventListener('DOMContentLoaded', () => {
         this_car.update()
     })
     gate.update()
+    validator.update()
     
     circles.forEach(this_circle => {
         this_circle.update()
@@ -469,12 +482,6 @@ document.addEventListener('DOMContentLoaded', () => {
             context.clearRect(0,0,canvas.width, canvas.height)
             drawBackground()
 
-            cars.forEach(this_car => {
-                this_car.crash = false
-                this_car.spinning = false
-                this_car.update(context)
-            })
-
             circles.forEach(this_circle => {
                 this_circle.update()
             })
@@ -483,8 +490,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 this_oil.update()
             })
 
-            gate.draw(context)
+            gate.update()
+            validator.update()
             
+            cars.forEach(this_car => {
+                this_car.crash = false
+                this_car.spinning = false
+                this_car.update(context)
+            })
             
             cars.forEach(this_car => {
                 
@@ -505,7 +518,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     else {
                         if (this_oil.respawnTime <= 0) {
-                            console.log("Oil reactivating")
                             this_oil.active = true
                         }
                         else {
@@ -527,6 +539,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 this_car.checkGate()
+                this_car.checkValid()
 
             });
         } 
